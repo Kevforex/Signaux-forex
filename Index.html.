@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Signaux Forex</title>
+<style>
+body{font-family:Arial;background:#0f172a;color:#e2e8f0;margin:0;padding:16px}
+h1{margin:0 0 4px}.sub{color:#94a3b8;margin-bottom:16px}
+.card{background:#1e293b;border-radius:12px;padding:14px;margin-bottom:14px}
+button{background:#2563eb;color:#fff;border:0;padding:12px 16px;border-radius:8px;font-size:16px;width:100%}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:8px;border-bottom:1px solid #334155;text-align:left}
+.buy{color:#22c55e;font-weight:bold}.sell{color:#ef4444;font-weight:bold}.wait{color:#f59e0b;font-weight:bold}
+.warn{background:#7f1d1d;border-left:4px solid #ef4444;font-size:13px}
+</style>
+</head>
+<body>
+<h1>Signaux Forex</h1>
+<p class="sub">Analyse simple : MM50 + RSI 14 — H1</p>
+
+<div class="card warn">
+<strong>Attention :</strong> ceci est un outil éducatif. Aucun signal ne garantit un profit. Utilise uniquement ton compte démo MT5 et ne risque jamais plus de 1 % par trade.
+</div>
+
+<div class="card">
+<button onclick="lancer()">Actualiser les signaux</button>
+<p id="etat">Clique sur « Actualiser les signaux ».</p>
+</div>
+
+<div class="card">
+<table>
+<thead><tr><th>Paire</th><th>Signal</th><th>Prix</th><th>RSI</th><th>Stop-loss</th><th>Objectif</th></tr></thead>
+<tbody id="resultats"><tr><td colspan="6">Aucun signal chargé.</td></tr></tbody>
+</table>
+</div>
+
+<script>
+const CLE_API = "METTE_TA_CLE_API_ICI";
+const PAIRES = ["EUR/USD", "GBP/USD", "USD/JPY"];
+
+function rsi(prix, periode = 14) {
+  if (prix.length < periode + 1) return null;
+  let gains = 0, pertes = 0;
+  for (let i = prix.length - periode; i < prix.length; i++) {
+    const diff = prix[i] - prix[i - 1];
+    if (diff >= 0) gains += diff; else pertes -= diff;
+  }
+  const moyenneGain = gains / periode;
+  const moyennePerte = pertes / periode;
+  if (moyennePerte === 0) return 100;
+  const rs = moyenneGain / moyennePerte;
+  return 100 - (100 / (1 + rs));
+}
+
+function mm(prix, periode = 50) {
+  if (prix.length < periode) return null;
+  const dernier = prix.slice(-periode);
+  return dernier.reduce((a, b) => a + b, 0) / periode;
+}
+
+async function analyser(paire) {
+  const url = `https://api.twelvedata.com/time_series?symbol=${paire}&interval=1h&outputsize=100&apikey=${CLE_API}`;
+  const reponse = await fetch(url);
+  const donnees = await reponse.json();
+
+  if (!donnees.values) return { paire, signal: "ERREUR", prix: "-", rsi: "-", stop: "-", objectif: "-" };
+
+  const closes = donnees.values.map(v => parseFloat(v.close)).reverse();
+  const prix = closes[closes.length - 1];
+  const moyenne = mm(closes, 50);
+  const rsiActuel = rsi(closes, 14);
+
+  let signal = "ATTENTE";
+  let stop = "-";
+  let objectif = "-";
+
+  if (moyenne && rsiActuel) {
+    if (prix > moyenne && rsiActuel < 60) {
+      signal = "ACHAT";
+      stop = (prix * 0.99).toFixed(5);
+      objectif = (prix * 1.02).toFixed(5);
+    } else if (prix < moyenne && rsiActuel > 40) {
+      signal = "VENTE";
+      stop = (prix * 1.01).toFixed(5);
+      objectif = (prix * 0.98).toFixed(5);
+    }
+  }
+
+  return {
+    paire,
+    signal,
+    prix: prix.toFixed(5),
+    rsi: rsiActuel ? rsiActuel.toFixed(1) : "-",
+    stop,
+    objectif
+  };
+}
+
+async function lancer() {
+  document.getElementById("etat").innerText = "Analyse en cours...";
+  const resultats = [];
+
+  for (const paire of PAIRES) {
+    try {
+      resultats.push(await analyser(paire));
+    } catch (e) {
+      resultats.push({ paire, signal: "ERREUR", prix: "-", rsi: "-", stop: "-", objectif: "-" });
+    }
+  }
+
+  document.getElementById("resultats").innerHTML = resultats.map(r => `
+    <tr>
+      <td>${r.paire}</td>
+      <td class="${r.signal.toLowerCase()}">${r.signal}</td>
+      <td>${r.prix}</td>
+      <td>${r.rsi}</td>
+      <td>${r.stop}</td>
+      <td>${r.objectif}</td>
+    </tr>
+  `).join("");
+
+  document.getElementById("etat").innerText = "Signaux mis à jour.";
+}
+</script>
+</body>
+</html>
+b54cafeed2024383a26a8df91a2a2fd3
